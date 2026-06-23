@@ -19,6 +19,6 @@ Tailgating : Lasts for a moderate amount of time while feturing a few clips with
 Normal : Have the shortest and most consistent duration.
 
 **Motion Intensity**
-Normal (Highest) : Driving at steady speeds makes the background scenery move within the camera quickly, causing massive pixel changes.
-Tailgating (Lower) : The camera locked onto the back of another car moving at the exact same speed. Because the motion between the two cars is relatively the same, only the edges of the frame show movement.
+Normal (Highest) : Driving at steady speeds makes the background scenery move within the camera quickly, causing massive pixel changes.<br>
+Tailgating (Lower) : The camera locked onto the back of another car moving at the exact same speed. Because the motion between the two cars is relatively the same, only the edges of the frame show movement.<br>
 Swerving (Lowest) : Swerving usually happens at lower speeds like changing lane or dodging things, resulted in less overall pixel changes.
