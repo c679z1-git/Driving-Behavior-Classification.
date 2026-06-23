@@ -59,7 +59,6 @@ def download_image_as_gray(path):
     return gray_image
 
 root_folders = [item["path"] for item in get_folder_items("") if item["type"] == "directory"]
-
 folder_to_label = {}
 for folder in root_folders:
     for label in labels:
@@ -91,7 +90,6 @@ def get_clip_details(row):
 
 frames_dict = {}
 sizes_dict = {}
-
 with ThreadPoolExecutor(max_workers=max_threads) as pool:
     tasks = {pool.submit(get_clip_details, row): i for i, row in video_df.iterrows()}
     for task in as_completed(tasks):
@@ -106,4 +104,66 @@ video_df["size_in_mb"] = video_df.index.map(sizes_dict)
 
 label_stats = video_df.groupby("label").agg(
     total_clips=("clip_name", "count"),
-    total_frames=("total_
+    total_frames=("total_frames", "sum"),
+    total_size_mb=("size_in_mb", "sum"),
+    total_volume_min=("seconds", lambda x: x.sum() / 60),
+    avg_duration_sec=("seconds", "mean")
+).reset_index()
+
+print(label_stats.to_string(index=False))
+print(video_df.groupby("label")["seconds"].describe()[["mean", "min", "max"]].round(2))
+
+def compute_motion(idx, frames):
+    if len(frames) < frames_to_check:
+        return idx, 0.0
+    idxs = get_frame_numbers(len(frames), frames_to_check)
+    grays = []
+    for i in idxs:
+        img = download_image_as_gray(frames[i])
+        if img is not None:
+            grays.append(cv2.resize(img, (320, 180)))
+    if len(grays) < 2:
+        return idx, 0.0
+    diffs = []
+    for i in range(len(grays) - 1):
+        diff = cv2.absdiff(grays[i], grays[i+1])
+        diffs.append(diff.mean())
+    return idx, float(np.mean(diffs))
+
+motion_dict = {}
+with ThreadPoolExecutor(max_workers=max_threads) as pool:
+    tasks2 = {pool.submit(compute_motion, i, row["frames_list"]): i for i, row in video_df.iterrows()}
+    for task in as_completed(tasks2):
+        idx, score = task.result()
+        motion_dict[idx] = score
+
+video_df["motion_score"] = video_df.index.map(motion_dict)
+
+motion_stats = video_df.groupby("label")["motion_score"].mean().reset_index()
+colors = ["#3B4D8E", "#2A9D8F", "#57C47A"]
+
+fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+
+sns.barplot(data=label_stats, x="label", y="total_frames", ax=axes[0][0], palette=colors)
+axes[0][0].set_title("Distribution")
+axes[0][0].set_ylabel("frames")
+for p in axes[0][0].patches:
+    axes[0][0].annotate(f"{int(p.get_height()):,}", (p.get_x() + p.get_width() / 2, p.get_height()), ha="center", va="bottom", fontsize=9)
+
+sns.barplot(data=motion_stats, x="label", y="motion_score", ax=axes[0][1], palette=colors)
+axes[0][1].set_title("Motion")
+axes[0][1].set_ylabel("avg intensity")
+for p in axes[0][1].patches:
+    axes[0][1].annotate(f"{p.get_height():.2f}", (p.get_x() + p.get_width() / 2, p.get_height()), ha="center", va="bottom", fontsize=9)
+
+sns.barplot(data=label_stats, x="label", y="total_size_mb", ax=axes[1][0], palette=colors)
+axes[1][0].set_title("Volume")
+axes[1][0].set_ylabel("MB")
+
+sns.boxplot(data=video_df, x="label", y="seconds", ax=axes[1][1], palette=colors)
+axes[1][1].set_title("Duration")
+axes[1][1].set_ylabel("seconds")
+
+plt.tight_layout()
+plt.savefig("eda_output.png", dpi=150)
+plt.show()
